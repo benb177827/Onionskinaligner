@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Onion Skin Aligner</title>
+<style>
+  :root{
+    --bg:#14171c; --panel:#1d2129; --panel2:#232834; --line:#323a49;
+    --text:#dce3ef; --dim:#8b96a8; --accent:#5fb2ff; --accent2:#ffb454;
+    --good:#67d58e; --bad:#ff7a7a; --mono:'Consolas','Menlo',monospace;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{background:var(--bg); color:var(--text); font:13px/1.45 system-ui,Segoe UI,sans-serif; height:100vh; display:flex; overflow:hidden;}
+  #sidebar{width:320px; min-width:320px; background:var(--panel); border-right:1px solid var(--line); overflow-y:auto; padding:14px; display:flex; flex-direction:column; gap:12px;}
+  h1{font-size:15px; letter-spacing:.04em;}
+  h1 span{color:var(--accent);}
+  .sub{color:var(--dim); font-size:11.5px;}
+  section{background:var(--panel2); border:1px solid var(--line); border-radius:8px; padding:10px 12px;}
+  section h2{font-size:11px; text-transform:uppercase; letter-spacing:.09em; color:var(--dim); margin-bottom:8px;}
+  label{display:block; font-size:12px; color:var(--dim); margin:6px 0 2px;}
+  input[type=file]{width:100%; font-size:11px; color:var(--dim);}
+  input[type=number], input[type=text]{width:100%; background:var(--bg); border:1px solid var(--line); border-radius:5px; color:var(--text); padding:4px 6px; font-family:var(--mono); font-size:12px;}
+  input[type=range]{width:100%;}
+  .row{display:flex; gap:8px;}
+  .row>*{flex:1;}
+  button{background:var(--bg); border:1px solid var(--line); color:var(--text); border-radius:6px; padding:6px 8px; cursor:pointer; font-size:12px;}
+  button:hover{border-color:var(--accent);}
+  button.primary{background:var(--accent); border-color:var(--accent); color:#0b1420; font-weight:600;}
+  button.small{padding:2px 7px; font-size:11px;}
+  .modes{display:grid; grid-template-columns:1fr 1fr; gap:6px;}
+  .modes button.active{background:var(--accent); color:#0b1420; border-color:var(--accent); font-weight:600;}
+  table{width:100%; border-collapse:collapse; font-family:var(--mono); font-size:11.5px;}
+  th{color:var(--dim); text-align:left; font-weight:400; padding:2px 4px; border-bottom:1px solid var(--line);}
+  td{padding:3px 4px; border-bottom:1px solid var(--line);}
+  td input{padding:2px 4px;}
+  .del{color:var(--bad); cursor:pointer; user-select:none;}
+  #stage{flex:1; position:relative; overflow:hidden;}
+  canvas{position:absolute; inset:0; cursor:crosshair;}
+  #hud{position:absolute; left:10px; bottom:10px; background:rgba(20,23,28,.85); border:1px solid var(--line); border-radius:6px; padding:6px 10px; font-family:var(--mono); font-size:11.5px; color:var(--dim); pointer-events:none; white-space:pre;}
+  #hint{position:absolute; top:10px; left:50%; transform:translateX(-50%); background:rgba(20,23,28,.9); border:1px solid var(--line); border-radius:6px; padding:5px 12px; font-size:12px; color:var(--accent2); pointer-events:none;}
+  .status{font-family:var(--mono); font-size:11px;}
+  .status.ok{color:var(--good);} .status.no{color:var(--bad);}
+  .kbd{background:var(--bg); border:1px solid var(--line); border-radius:3px; padding:0 4px; font-family:var(--mono); font-size:10.5px;}
+  details summary{cursor:pointer; color:var(--dim); font-size:11.5px;}
+  details p{margin:5px 0; color:var(--dim); font-size:11.5px;}
+  .checkline{display:flex; align-items:center; gap:6px; margin-top:6px; font-size:12px; color:var(--dim);}
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+  <div>
+    <h1>Onion <span>Skin</span> Aligner</h1>
+    <div class="sub">Calibrate a background, float an overlay, read points in global coordinates.</div>
+  </div>
+
+  <section>
+    <h2>1 · Images</h2>
+    <label>Background image</label>
+    <input type="file" id="bgFile" accept="image/*">
+    <label>Overlay image (onion skin)</label>
+    <input type="file" id="ovFile" accept="image/*">
+    <label>Overlay opacity <span id="opVal" class="status">50%</span></label>
+    <input type="range" id="opacity" min="5" max="100" value="50">
+  </section>
+
+  <section>
+    <h2>2 · Calibrate background → global</h2>
+    <div class="sub">Click two known points on the background (in <b>Calibrate</b> mode), then type their real-world coordinates.</div>
+    <div class="row" style="margin-top:6px;">
+      <div><label>Point A · global X</label><input type="number" id="g1x" step="any" placeholder="e.g. 0"></div>
+      <div><label>Point A · global Y</label><input type="number" id="g1y" step="any" placeholder="e.g. 0"></div>
+    </div>
+    <div class="row">
+      <div><label>Point B · global X</label><input type="number" id="g2x" step="any" placeholder="e.g. 100"></div>
+      <div><label>Point B · global Y</label><input type="number" id="g2y" step="any" placeholder="e.g. 0"></div>
+    </div>
+    <div class="checkline"><input type="checkbox" id="flipY"><label for="flipY" style="margin:0;">Global Y increases upward (maps / graphs)</label></div>
+    <div style="margin-top:6px;" class="row">
+      <button id="clearCal" class="small">Reset points</button>
+      <div class="status" id="calStatus" style="align-self:center;">not calibrated</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>3 · Mode</h2>
+    <div class="modes">
+      <button data-mode="pan" class="active">Pan view</button>
+      <button data-mode="calibrate">Calibrate</button>
+      <button data-mode="move">Move overlay</button>
+      <button data-mode="points">Add points</button>
+    </div>
+    <label style="margin-top:8px;">Overlay scale <span id="scVal" class="status">1.000</span></label>
+    <input type="range" id="ovScale" min="-200" max="200" value="0">
+    <label>Overlay rotation <span id="rotVal" class="status">0.0°</span></label>
+    <input type="range" id="ovRot" min="-1800" max="1800" value="0">
+    <div class="row" style="margin-top:6px;">
+      <button id="resetOv" class="small">Reset overlay</button>
+      <button id="fitView" class="small">Fit view</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>4 · Points of interest — global coords</h2>
+    <table id="poiTable">
+      <thead><tr><th>name</th><th>global X</th><th>global Y</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="row" style="margin-top:8px;">
+      <button id="copyBtn" class="small">Copy</button>
+      <button id="csvBtn" class="small primary">Download CSV</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>5 · Project file</h2>
+    <div class="sub">Saves calibration, overlay position and points as a plain-text <b>.osa</b> file. Images aren't embedded — reload the same image files after opening a project.</div>
+    <div class="row" style="margin-top:8px;">
+      <button id="loadOsa" class="small">Open .osa</button>
+      <button id="saveOsa" class="small primary">Save .osa</button>
+    </div>
+    <input type="file" id="osaFile" accept=".osa,text/plain" hidden>
+  </section>
+
+  <details>
+    <summary>Help &amp; shortcuts</summary>
+    <p><b>Pan view</b>: drag to pan · scroll wheel zooms (any mode).</p>
+    <p><b>Calibrate</b>: click reference point A, then B, on the background. Enter their global coordinates. Scale + rotation are worked out automatically.</p>
+    <p><b>Add points</b>: click on the overlay to pin a point of interest. Points stick to the overlay as you move it.</p>
+    <p><b>Move overlay</b>: drag to move · <span class="kbd">Shift</span>+scroll = scale · <span class="kbd">Alt</span>+scroll = rotate · arrow keys nudge (<span class="kbd">Shift</span> = fine).</p>
+  </details>
+</div>
+
+<div id="stage">
+  <canvas id="cv"></canvas>
+  <div id="hint" hidden></div>
+  <div id="hud">no images loaded</div>
+</div>
+
+<script>
+'use strict';
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+const stage = document.getElementById('stage');
+const hud = document.getElementById('hud'), hint = document.getElementById('hint');
+
+// ---------- state ----------
+let bgImg = null, ovImg = null;
+let view = {s:1, x:0, y:0};                     // background px -> screen
+let ov   = {x:0, y:0, s:1, rot:0};              // overlay local -> background px
+let opacity = 0.5;
+let mode = 'pan';
+let refA = null, refB = null;                   // calibration clicks, background px
+let pois = [];                                  // {id, name, lx, ly} overlay-local px
+let poiSeq = 1;
+let mouse = {x:0, y:0, down:false, sx:0, sy:0, ovStart:null, viewStart:null};
+
+// ---------- transforms ----------
+const screenToBg = (x,y)=>({x:(x-view.x)/view.s, y:(y-view.y)/view.s});
+const bgToScreen = (x,y)=>({x:x*view.s+view.x, y:y*view.s+view.y});
+function ovToBg(lx,ly){
+  const c=Math.cos(ov.rot), s=Math.sin(ov.rot);
+  return {x: ov.x + ov.s*(c*lx - s*ly), y: ov.y + ov.s*(s*lx + c*ly)};
+}
+function bgToOv(bx,by){
+  const c=Math.cos(-ov.rot), s=Math.sin(-ov.rot);
+  const dx=(bx-ov.x)/ov.s, dy=(by-ov.y)/ov.s;
+  return {x: c*dx - s*dy, y: s*dx + c*dy};
+}
+
+// calibration: complex similarity  global = a·p + b   (p = bg px, y possibly negated)
+function calib(){
+  const g1={x:+g1x.value, y:+g1y.value}, g2={x:+g2x.value, y:+g2y.value};
+  if(!refA || !refB || [g1x,g1y,g2x,g2y].some(i=>i.value==='')) return null;
+  const fy = flipY.checked ? -1 : 1;
+  const p1={x:refA.x, y:fy*refA.y}, p2={x:refB.x, y:fy*refB.y};
+  const dpx=p2.x-p1.x, dpy=p2.y-p1.y, den=dpx*dpx+dpy*dpy;
+  if(den < 1e-9) return null;
+  const dgx=g2.x-g1.x, dgy=g2.y-g1.y;
+  const ar=(dgx*dpx+dgy*dpy)/den, ai=(dgy*dpx-dgx*dpy)/den;      // a = Δg/Δp
+  const br=g1.x-(ar*p1.x-ai*p1.y), bi=g1.y-(ar*p1.y+ai*p1.x);    // b = g1 − a·p1
+  return {ar,ai,br,bi,fy};
+}
+function bgToGlobal(bx,by){
+  const c=calib(); if(!c) return null;
+  const px=bx, py=c.fy*by;
+  return {x:c.ar*px - c.ai*py + c.br, y:c.ar*py + c.ai*px + c.bi};
+}
+
+// ---------- files ----------
+let bgName='', ovName='', pendingOv=null;   // pendingOv: overlay transform waiting from a project file
+function loadFile(input, cb){
+  input.addEventListener('change', ()=>{
+    const f=input.files[0]; if(!f) return;
+    const img=new Image();
+    img.onload=()=>{cb(img, f.name); draw();};
+    img.src=URL.createObjectURL(f);
+  });
+}
+loadFile(bgFile, (img,name)=>{bgImg=img; bgName=name; fitViewToBg();});
+loadFile(ovFile, (img,name)=>{
+  ovImg=img; ovName=name;
+  if(pendingOv){ ov={...pendingOv}; pendingOv=null; }
+  else if(bgImg){ // start centred on background
+    ov={x:(bgImg.width-img.width)/2, y:(bgImg.height-img.height)/2, s:1, rot:0};
+  } else ov={x:0,y:0,s:1,rot:0};
+  syncSliders(); refreshTable();
+});
+function fitViewToBg(){
+  if(!bgImg) return;
+  const s=Math.min(cv.width/bgImg.width, cv.height/bgImg.height)*0.95;
+  view={s, x:(cv.width-bgImg.width*s)/2, y:(cv.height-bgImg.height*s)/2};
+}
+
+// ---------- ui wiring ----------
+const opacityInput=document.getElementById('opacity');
+let op=0.5;
+opacityInput.oninput=()=>{op=opacityInput.value/100; opVal.textContent=opacityInput.value+'%'; draw();};
+
+document.querySelectorAll('.modes button').forEach(b=>{
+  b.onclick=()=>{
+    document.querySelectorAll('.modes button').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active'); mode=b.dataset.mode; updateHint(); draw();
+  };
+});
+function updateHint(){
+  const msgs={
+    pan:'', 
+    calibrate: refA? (refB?'Both reference points set — enter global coordinates below':'Click reference point B on the background')
+                   : 'Click reference point A on the background',
+    move:'Drag to move overlay · Shift+scroll scale · Alt+scroll rotate',
+    points:'Click on the overlay to add a point of interest'
+  };
+  const m=msgs[mode];
+  hint.hidden=!m; hint.textContent=m;
+}
+
+ovScale.oninput=()=>{
+  const target=Math.pow(10, ovScale.value/200);
+  if(ovImg) scaleOverlayAbout(target/ov.s); else ov.s=target;
+  scVal.textContent=ov.s.toFixed(3); refreshTable(); draw();
+};
+ovRot.oninput=()=>{
+  const target=ovRot.value/10*Math.PI/180;
+  if(ovImg) rotateOverlayAbout(target-ov.rot); else ov.rot=target;
+  rotVal.textContent=(ovRot.value/10).toFixed(1)+'°'; refreshTable(); draw();
+};
+function syncSliders(){
+  ovScale.value=Math.round(200*Math.log10(ov.s));
+  ovRot.value=Math.round(ov.rot*180/Math.PI*10);
+  scVal.textContent=ov.s.toFixed(3);
+  rotVal.textContent=(ov.rot*180/Math.PI).toFixed(1)+'°';
+}
+resetOv.onclick=()=>{
+  if(ovImg&&bgImg) ov={x:(bgImg.width-ovImg.width)/2,y:(bgImg.height-ovImg.height)/2,s:1,rot:0};
+  else ov={x:0,y:0,s:1,rot:0};
+  syncSliders(); draw();
+};
+fitView.onclick=()=>{fitViewToBg(); draw();};
+clearCal.onclick=()=>{refA=refB=null; updateCalStatus(); updateHint(); draw();};
+[g1x,g1y,g2x,g2y,flipY].forEach(el=>el.addEventListener('input',()=>{updateCalStatus(); refreshTable(); draw();}));
+
+function updateCalStatus(){
+  const ok=!!calib();
+  calStatus.textContent=ok?'✓ calibrated':'not calibrated';
+  calStatus.className='status '+(ok?'ok':'no');
+}
+
+// ---------- mouse ----------
+cv.addEventListener('mousedown', e=>{
+  mouse.down=true; mouse.sx=e.offsetX; mouse.sy=e.offsetY;
+  mouse.viewStart={...view}; mouse.ovStart={...ov};
+  if(mode==='calibrate'){
+    const p=screenToBg(e.offsetX,e.offsetY);
+    if(!refA) refA=p; else refB=p;
+    updateCalStatus(); updateHint(); refreshTable(); draw();
+  }
+  if(mode==='points' && ovImg){
+    const bg=screenToBg(e.offsetX,e.offsetY);
+    const l=bgToOv(bg.x,bg.y);
+    if(l.x>=0&&l.y>=0&&l.x<=ovImg.width&&l.y<=ovImg.height){
+      pois.push({id:poiSeq, name:'P'+poiSeq, lx:l.x, ly:l.y}); poiSeq++;
+      refreshTable(); draw();
+    }
+  }
+});
+window.addEventListener('mouseup', ()=>mouse.down=false);
+cv.addEventListener('mousemove', e=>{
+  mouse.x=e.offsetX; mouse.y=e.offsetY;
+  if(mouse.down){
+    const dx=e.offsetX-mouse.sx, dy=e.offsetY-mouse.sy;
+    if(mode==='pan'){ view.x=mouse.viewStart.x+dx; view.y=mouse.viewStart.y+dy; }
+    if(mode==='move'){ ov.x=mouse.ovStart.x+dx/view.s; ov.y=mouse.ovStart.y+dy/view.s; refreshTable(); }
+  }
+  draw();
+});
+cv.addEventListener('wheel', e=>{
+  e.preventDefault();
+  if(mode==='move' && e.shiftKey && ovImg){          // scale overlay about its centre
+    scaleOverlayAbout(Math.exp(-e.deltaY*0.0015));
+  } else if(mode==='move' && e.altKey && ovImg){     // rotate overlay about its centre
+    rotateOverlayAbout(-e.deltaY*0.0012);
+  } else {                                           // zoom view at cursor
+    const k=Math.exp(-e.deltaY*0.0015);
+    const b=screenToBg(e.offsetX,e.offsetY);
+    view.s*=k; view.x=e.offsetX-b.x*view.s; view.y=e.offsetY-b.y*view.s;
+  }
+  syncSliders(); refreshTable(); draw();
+},{passive:false});
+
+function overlayCentreBg(){ return ovToBg(ovImg.width/2, ovImg.height/2); }
+function scaleOverlayAbout(k){
+  const c=overlayCentreBg();
+  ov.s*=k; ov.x=c.x-(c.x-ov.x)*k; ov.y=c.y-(c.y-ov.y)*k;
+}
+function rotateOverlayAbout(a){
+  const c=overlayCentreBg();
+  const cos=Math.cos(a), sin=Math.sin(a);
+  const dx=ov.x-c.x, dy=ov.y-c.y;
+  ov.x=c.x+cos*dx-sin*dy; ov.y=c.y+sin*dx+cos*dy; ov.rot+=a;
+}
+window.addEventListener('keydown', e=>{
+  if(document.activeElement.tagName==='INPUT') return;
+  const step=(e.shiftKey?0.25:2)/view.s;
+  let moved=true;
+  if(e.key==='ArrowLeft') ov.x-=step;
+  else if(e.key==='ArrowRight') ov.x+=step;
+  else if(e.key==='ArrowUp') ov.y-=step;
+  else if(e.key==='ArrowDown') ov.y+=step;
+  else moved=false;
+  if(moved){ e.preventDefault(); refreshTable(); draw(); }
+});
+
+// ---------- POI table ----------
+function fmt(v){ return Math.abs(v)>=1e6 ? v.toExponential(4) : (+v.toFixed(3)).toString(); }
+function refreshTable(){
+  const tb=document.querySelector('#poiTable tbody');
+  tb.innerHTML='';
+  pois.forEach(p=>{
+    const bg=ovToBg(p.lx,p.ly);
+    const g=bgToGlobal(bg.x,bg.y);
+    const tr=document.createElement('tr');
+    const nameTd=document.createElement('td');
+    const nameIn=document.createElement('input');
+    nameIn.type='text'; nameIn.value=p.name;
+    nameIn.oninput=()=>{p.name=nameIn.value; draw();};
+    nameTd.appendChild(nameIn);
+    const xTd=document.createElement('td'), yTd=document.createElement('td');
+    xTd.textContent=g?fmt(g.x):'—'; yTd.textContent=g?fmt(g.y):'—';
+    const dTd=document.createElement('td');
+    dTd.innerHTML='<span class="del">✕</span>';
+    dTd.querySelector('.del').onclick=()=>{pois=pois.filter(q=>q!==p); refreshTable(); draw();};
+    tr.append(nameTd,xTd,yTd,dTd); tb.appendChild(tr);
+  });
+}
+function rowsText(sep){
+  let out='name'+sep+'global_x'+sep+'global_y\n';
+  pois.forEach(p=>{
+    const bg=ovToBg(p.lx,p.ly), g=bgToGlobal(bg.x,bg.y);
+    out+=p.name+sep+(g?g.x:'')+sep+(g?g.y:'')+'\n';
+  });
+  return out;
+}
+copyBtn.onclick=()=>navigator.clipboard.writeText(rowsText('\t'));
+csvBtn.onclick=()=>{
+  const blob=new Blob([rowsText(',')],{type:'text/csv'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download='points_global.csv'; a.click();
+};
+
+// ---------- project file (.osa, plain ASCII) ----------
+function buildOsa(){
+  const n=v=>+(+v).toFixed(6);
+  const L=[];
+  L.push('# Onion Skin Aligner project');
+  L.push('version = 1');
+  L.push('');
+  L.push('[images]');
+  L.push('background = '+bgName);
+  L.push('overlay = '+ovName);
+  L.push('');
+  L.push('[calibration]');
+  if(refA) L.push('refA_px = '+n(refA.x)+', '+n(refA.y));
+  if(refB) L.push('refB_px = '+n(refB.x)+', '+n(refB.y));
+  L.push('A_global = '+g1x.value+', '+g1y.value);
+  L.push('B_global = '+g2x.value+', '+g2y.value);
+  L.push('flip_y = '+(flipY.checked?1:0));
+  L.push('');
+  L.push('[overlay_transform]');
+  L.push('x = '+n(ov.x));
+  L.push('y = '+n(ov.y));
+  L.push('scale = '+n(ov.s));
+  L.push('rotation_deg = '+n(ov.rot*180/Math.PI));
+  L.push('opacity = '+opacityInput.value);
+  L.push('');
+  L.push('[points]');
+  L.push('# overlay_local_x, overlay_local_y, name');
+  pois.forEach(p=>L.push(n(p.lx)+', '+n(p.ly)+', '+p.name));
+  return L.join('\n')+'\n';
+}
+saveOsa.onclick=()=>{
+  const blob=new Blob([buildOsa()],{type:'text/plain'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download='project.osa'; a.click();
+};
+loadOsa.onclick=()=>osaFile.click();
+osaFile.addEventListener('change', ()=>{
+  const f=osaFile.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{ parseOsa(r.result); osaFile.value=''; };
+  r.readAsText(f);
+});
+function parseOsa(text){
+  let sec='', imgs={background:'',overlay:''};
+  const nums=s=>s.split(',').map(v=>parseFloat(v));
+  const newOv={x:0,y:0,s:1,rot:0};
+  refA=refB=null; pois=[]; poiSeq=1;
+  text.split(/\r?\n/).forEach(raw=>{
+    const line=raw.trim();
+    if(!line || line.startsWith('#') || line.startsWith(';')) return;
+    const m=line.match(/^\[(.+)\]$/);
+    if(m){ sec=m[1]; return; }
+    if(sec==='points'){
+      const parts=line.split(',');
+      if(parts.length>=2){
+        const lx=parseFloat(parts[0]), ly=parseFloat(parts[1]);
+        const name=parts.slice(2).join(',').trim() || ('P'+poiSeq);
+        if(isFinite(lx)&&isFinite(ly)){ pois.push({id:poiSeq, name, lx, ly}); poiSeq++; }
+      }
+      return;
+    }
+    const eq=line.indexOf('='); if(eq<0) return;
+    const key=line.slice(0,eq).trim(), val=line.slice(eq+1).trim();
+    if(sec==='images'){ imgs[key]=val; }
+    else if(sec==='calibration'){
+      if(key==='refA_px'){ const [x,y]=nums(val); refA={x,y}; }
+      if(key==='refB_px'){ const [x,y]=nums(val); refB={x,y}; }
+      if(key==='A_global'){ const [x,y]=nums(val); g1x.value=isFinite(x)?x:''; g1y.value=isFinite(y)?y:''; }
+      if(key==='B_global'){ const [x,y]=nums(val); g2x.value=isFinite(x)?x:''; g2y.value=isFinite(y)?y:''; }
+      if(key==='flip_y'){ flipY.checked = val==='1'; }
+    }
+    else if(sec==='overlay_transform'){
+      if(key==='x') newOv.x=parseFloat(val);
+      if(key==='y') newOv.y=parseFloat(val);
+      if(key==='scale') newOv.s=parseFloat(val)||1;
+      if(key==='rotation_deg') newOv.rot=(parseFloat(val)||0)*Math.PI/180;
+      if(key==='opacity'){ opacityInput.value=parseFloat(val)||50; op=opacityInput.value/100; opVal.textContent=opacityInput.value+'%'; }
+    }
+  });
+  if(ovImg){ ov={...newOv}; } else { pendingOv={...newOv}; }
+  syncSliders(); updateCalStatus(); updateHint(); refreshTable(); draw();
+  let msg='Project loaded.';
+  if(imgs.background && bgName!==imgs.background) msg+=' Load background image: '+imgs.background+'.';
+  if(imgs.overlay && ovName!==imgs.overlay) msg+=' Load overlay image: '+imgs.overlay+'.';
+  hint.hidden=false; hint.textContent=msg;
+  setTimeout(()=>updateHint(), 6000);
+}
+
+// ---------- drawing ----------
+function resize(){
+  cv.width=stage.clientWidth; cv.height=stage.clientHeight;
+  draw();
+}
+window.addEventListener('resize', resize);
+
+function marker(x,y,color,label){
+  ctx.beginPath(); ctx.arc(x,y,5,0,7); ctx.fillStyle=color; ctx.fill();
+  ctx.lineWidth=1.5; ctx.strokeStyle='#0b1420'; ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x-9,y); ctx.lineTo(x+9,y); ctx.moveTo(x,y-9); ctx.lineTo(x,y+9);
+  ctx.strokeStyle=color; ctx.lineWidth=1; ctx.stroke();
+  if(label){
+    ctx.font='11px Consolas,monospace'; ctx.fillStyle=color;
+    ctx.fillText(label, x+8, y-8);
+  }
+}
+
+function draw(){
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.clearRect(0,0,cv.width,cv.height);
+  // checker backdrop
+  ctx.fillStyle='#181c22'; ctx.fillRect(0,0,cv.width,cv.height);
+
+  if(bgImg){
+    ctx.setTransform(view.s,0,0,view.s,view.x,view.y);
+    ctx.imageSmoothingEnabled = view.s<3;
+    ctx.drawImage(bgImg,0,0);
+  }
+  if(ovImg){
+    ctx.setTransform(view.s,0,0,view.s,view.x,view.y);
+    ctx.translate(ov.x,ov.y); ctx.rotate(ov.rot); ctx.scale(ov.s,ov.s);
+    ctx.globalAlpha=op;
+    ctx.drawImage(ovImg,0,0);
+    ctx.globalAlpha=1;
+    // overlay border
+    ctx.lineWidth=1.5/(view.s*ov.s); ctx.strokeStyle='rgba(95,178,255,.8)';
+    ctx.strokeRect(0,0,ovImg.width,ovImg.height);
+  }
+  // markers in screen space
+  ctx.setTransform(1,0,0,1,0,0);
+  if(refA){const s=bgToScreen(refA.x,refA.y); marker(s.x,s.y,'#ffb454','A');}
+  if(refB){const s=bgToScreen(refB.x,refB.y); marker(s.x,s.y,'#ffb454','B');}
+  pois.forEach(p=>{
+    const bg=ovToBg(p.lx,p.ly), s=bgToScreen(bg.x,bg.y);
+    marker(s.x,s.y,'#67d58e',p.name);
+  });
+
+  // HUD
+  const b=screenToBg(mouse.x,mouse.y);
+  const g=bgToGlobal(b.x,b.y);
+  hud.textContent =
+    (bgImg?`bg px  ${b.x.toFixed(1)}, ${b.y.toFixed(1)}`:'no background loaded') +
+    (g?`\nglobal ${fmt(g.x)}, ${fmt(g.y)}`:'\nglobal —  (calibrate first)') +
+    `\nzoom   ${(view.s*100).toFixed(0)}%`;
+}
+
+resize(); updateCalStatus(); updateHint();
+</script>
+</body>
+</html>

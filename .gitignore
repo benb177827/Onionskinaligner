@@ -1,0 +1,48 @@
+# --- Secrets & credentials (never commit these) ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+id_rsa*
+id_ed25519*
+secrets.*
+credentials*.json
+service-account*.json
+.npmrc
+.netrc
+
+# --- Hosting / deploy tool state ---
+.vercel/
+.netlify/
+.firebase/
+.wrangler/
+
+# --- Your own working data (images and project files you load locally) ---
+# The app never uploads these; keep them out of the public repo too.
+/private/
+/data/
+*.local.osa
+
+# --- Dependencies & build output (in case tooling is added later) ---
+node_modules/
+dist/
+build/
+.cache/
+
+# --- Editor / OS clutter ---
+.DS_Store
+._*
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+*~
+
+# --- Logs ---
+*.log
+npm-debug.log*

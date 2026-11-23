@@ -1,0 +1,26 @@
+# Onion Skin Aligner project
+version = 1
+
+[images]
+background = site-plan.png
+overlay = survey-sketch.png
+
+[calibration]
+refA_px = 120, 840
+refB_px = 1620, 840
+A_global = 0, 0
+B_global = 300, 0
+flip_y = 1
+
+[overlay_transform]
+x = 410.5
+y = 260.25
+scale = 0.92
+rotation_deg = -3.5
+opacity = 50
+
+[points]
+# overlay_local_x, overlay_local_y, name
+120.5, 88.2, P1
+340, 95.75, P2
+210.25, 400, Well head
